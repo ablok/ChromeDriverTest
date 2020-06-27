@@ -1,3 +1,12 @@
+const join = require("path").join;
+const edgeDriverPath = require("@sitespeed.io/edgedriver").binPath;
+const chromeDriverPath = require("@sitespeed.io/chromedriver").binPath;
+const geckoDriverPath = require("@sitespeed.io/geckodriver").binPath;
+const child = require("child_process");
+const seleniumServerPath = require("selenium-server").path;
+
+let seleniumServerProcess;
+
 exports.config = {
     //
     // ====================
@@ -7,6 +16,8 @@ exports.config = {
     // WebdriverIO allows it to run your tests in arbitrary locations (e.g. locally or
     // on a remote machine).
     runner: 'local',
+    path: "/wd/hub",
+    port: 4444,
     //
     // ==================
     // Specify Test Files
@@ -60,6 +71,8 @@ exports.config = {
         // excludeDriverLogs: ['bugreport', 'server'],
     }, {
         browserName: 'firefox'
+    }, {
+        browserName: 'MicrosoftEdge'
     }],
     //
     // ===================
@@ -108,23 +121,23 @@ exports.config = {
     // Services take over a specific job you don't want to take care of. They enhance
     // your test setup with almost no effort. Unlike plugins, they don't add new
     // commands. Instead, they hook themselves up into the test process.
-    services: [
-        ['selenium-standalone', {
-            logPath: 'logs',
-            installArgs: {
-                drivers: {
-                    chrome: { version: '83.0.4103.39' },
-                    firefox: { version: '0.26.0' }
-                }
-            },
-            args: {
-                drivers: {
-                    chrome: { version: '83.0.4103.39' },
-                    firefox: { version: '0.26.0' }
-                }
-            },
-        }]
-    ],
+    // services: [
+    //     ['selenium-standalone', {
+    //         logPath: 'logs',
+    //         installArgs: {
+    //             drivers: {
+    //                 chrome: { version: '83.0.4103.39' },
+    //                 firefox: { version: '0.26.0' }
+    //             }
+    //         },
+    //         args: {
+    //             drivers: {
+    //                 chrome: { version: '83.0.4103.39' },
+    //                 firefox: { version: '0.26.0' }
+    //             }
+    //         },
+    //     }]
+    // ],
 
     // Framework you want to run your specs with.
     // The following are supported: Mocha, Jasmine, and Cucumber
@@ -164,8 +177,25 @@ exports.config = {
      * @param {Object} config wdio configuration object
      * @param {Array.<Object>} capabilities list of capabilities details
      */
-    // onPrepare: function (config, capabilities) {
-    // },
+    onPrepare: function (config) {
+        seleniumServerProcess = child.execFile("java", [
+            `-Dwebdriver.chrome.driver=${chromeDriverPath()}`,
+            `-Dwebdriver.gecko.driver=${geckoDriverPath()}`,
+            `-Dwebdriver.edge.driver=${edgeDriverPath()}`,
+            "-jar",
+            seleniumServerPath,
+            "-port",
+            config.port,
+            "-log",
+            join(config.outputDir, "selenium-server.log")
+        ]);
+
+        // dirty loop to make sure server is started
+        var currentTime = new Date().getTime();
+        while (currentTime + 5000 >= new Date().getTime()) {
+        }
+
+    },
     /**
      * Gets executed before a worker process is spawned and can be used to initialise specific service
      * for that worker as well as modify runtime environments in an async fashion.
@@ -271,8 +301,11 @@ exports.config = {
      * @param {Array.<Object>} capabilities list of capabilities details
      * @param {<Object>} results object containing test results
      */
-    // onComplete: function(exitCode, config, capabilities, results) {
-    // },
+    onComplete: function (exitCode, config, capabilities, results) {
+        if (seleniumServerProcess) {
+            seleniumServerProcess.kill();
+        }
+    },
     /**
     * Gets executed when a refresh happens.
     * @param {String} oldSessionId session ID of the old session
